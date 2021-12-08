@@ -1,0 +1,12 @@
+{
+    "data_path" : ".",
+    "epoch_length" :{
+        "block1" : 0.2,
+        "block2" : 0.4,
+        "block3" : 0.3,
+        "block4" : 0.5
+    },
+    "blocks_in_data" : 6,
+    "trials_in_block" : 12,
+    "epochs_in_trials" : 5
+}

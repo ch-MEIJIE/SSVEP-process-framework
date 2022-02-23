@@ -4,9 +4,22 @@
         "block1" : 0.2,
         "block2" : 0.4,
         "block3" : 0.3,
-        "block4" : 0.5
+        "block4" : 0.5,
+        "simu_block1" : 0.2,
+        "simu_block2" : 0.4,
+        "simu_block3" : 0.3,
+        "simu_block4" : 0.5
     },
-    "blocks_in_data" : 6,
-    "trials_in_block" : 12,
-    "epochs_in_trials" : 5
+
+    "offline" :{
+        "blocks_in_data" : 6,
+        "trials_in_block" : 12,
+        "epochs_in_trials" : 5
+    },
+
+    "simu_online" :{
+        "blocks_in_data" : 2,
+        "trials_in_block" : 12,
+        "epochs_in_trials" : 10
+    }
 }

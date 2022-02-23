@@ -25,6 +25,9 @@ class LDA_trainer():
     def train_model(self):
         self.linear_model = LinearDiscriminantAnalysis()
         self.linear_model.fit(np.array(self.train_data),np.array(self.labels))
+    
+    def test_model(self, test_sample):
+        self.linear_model = self.linear_model.predict(test_sample)
 
 def trca_matrix(X):
     """ TRCA kernel function
@@ -182,8 +185,24 @@ def pattern_match(testsample,spatial_filters,template_storage):
 
 # %%
 class data_preprocessor():
-    
-    def __init__(self, usrname, data_path, block_num, file_name='EEG.mat', time_domain_filter = True, extended_bounds = 0):
+    """
+    Base class to load, pre-process, extract features and calculate templates from rawdata.
+    You can view this class as a base class and inherit it to develop your own developing process
+    """
+    def __init__(self, usrname, data_path, block_num, file_name='EEG.mat', time_domain_filter = True, extended_bounds = 0, data_type = 'offline'):
+        """Parameter initial function
+        
+        Note: 
+        1. The raw folder structure should be like: ParentFolder/usrname/block'N'/EEG.mat
+        2. Only data format '.mat' is supported now. You can use mne package or Matlab to load the raw data and convert it to .mat format.
+        
+        Args:
+            usrname (str): volunteer's name
+            data_path (str): parent folder's path
+            block_num (str): assoicated with how you named your data subfolder, in the example data folder structure, the parameter here is block'N'
+            spatial_filter_type (str, optional): The method to extract data features. Defaults to 'TRCA'.
+            cross_validation (bool, optional): whether to perform cross validation. Defaults to True.
+        """
         self.usrname = usrname
         self.data_path = data_path
         self.block_num = block_num
@@ -191,12 +210,13 @@ class data_preprocessor():
         self.slice_data_storage = dict()
         self.time_domain_filter = time_domain_filter
         self.extended_bounds = extended_bounds
+        self.data_type = data_type
     
     def read_config_file(self, file_name = 'config.json'):
         with open(file_name) as file:
             self.data_config = json.load(file)
-        self.blocks_in_data = self.data_config['blocks_in_data']
-        self.epochs_in_data = self.data_config['epochs_in_trials']
+        self.blocks_in_data = self.data_config[self.data_type]['blocks_in_data']
+        self.epochs_in_data = self.data_config[self.data_type]['epochs_in_trials']
         # epoch duration in unit second(s)
         self.epoch_duration = self.data_config['epoch_length'][self.block_num]
     
@@ -238,7 +258,10 @@ class data_preprocessor():
             warnings.warn('Imbalanced epochs check! The training later may go wrong, carefully check your data!')
     
     def send_data(self):
-        return self.slice_data_storage
+        data_info = dict()
+        data_info['epochs_in_data'] = self.epochs_in_data
+        data_info['blocks_in_data'] = self.blocks_in_data
+        return self.slice_data_storage, data_info
 
 # %%
 def data_loader(usrname='mengqiangfan', data_path='./ThesisData/',block_num='block4'):
@@ -252,3 +275,118 @@ def data_loader(usrname='mengqiangfan', data_path='./ThesisData/',block_num='blo
 if __name__ == '__main__':
     data_loader()
 # %%
+class result_analyser():
+    """ 
+    A helper class for analyzing the classification results.
+    """
+    def __init__(self,labels,CV_loops,epoch_num,data_type='offline', *args,**kwargs): 
+        """ Initial a result_analyser object
+
+        Args:
+            labels (array like vector): Triggers, which should be recorded from EEG amplifier. The triggers is a arrary which associating with how you perform your experiment.
+            CV_loops (int): Numbers of CV (Cross validation) loops
+            epoch_num (int): Numbers of epochs contained in single trial
+        """
+        self.labels = list(labels)
+        self.epoch_num = epoch_num
+        self.data_type = data_type
+        
+        if data_type == 'offline':
+            self.trial_counter = 0
+            self.CV_loops = CV_loops
+            self.acc_storage = np.zeros(self.CV_loops)
+            self.result_matrix = np.zeros((CV_loops,len(self.labels),self.epoch_num-self.overlap_size+1))
+            if kwargs["LDA"] == 'train':
+                self.LDA_status = 'train'
+                self.LDA_model_builder = LDA_trainer()
+            #TODO: check the args 
+        elif data_type == 'simu_online':
+            self.acc_storage = 0
+            self.result_matrix = np.zeros((self.epoch_num-self.overlap_size+1))   
+            if kwargs["LDA"] == 'test':
+                self.LDA_status = 'test'
+                self.verified_result_matrix = np.ones((self.epoch_num-self.overlap_size+1))  
+        else:
+            raise Exception('Unkown value, should be \'offline\' or \'simu_online\'.')
+
+        if "OVERLAP" in kwargs:
+            self.overlap_buffer = np.zeros((len(self.labels),kwargs["OVERLAP"]))
+            self.overlap_size = kwargs["OVERLAP"]
+        else:
+            self.overlap_buffer = np.zeros((len(self.labels),1))
+            self.overlap_size = 1
+    
+    def overlop_trials(self,vector,epoch_iter):
+        if epoch_iter == 0:
+            self.overlap_buffer = np.zeros((len(self.labels),self.overlap_size))
+        self.overlap_buffer[:,epoch_iter%self.overlap_size]=vector
+    
+    def result_decide(self,coef_vector,CV_iter,trial_iter,epoch_iter):
+        """
+        Determine whether the classification results match the triggers.
+
+        Args:
+            coef_vector (numpy array): A vector saved the correlation coefficients between the single trial and templates.
+            CV_iter (int): Current CV loop index, should be smaller than self.CV_loops.
+            trial_iter (int): Current trial index in a loop, should be smaller than length of self.labels.
+            epoch_iter ([type]): Current epoch index in a trial, should be smaller than self.epoch_num.
+        """
+        if self.data_type == 'offline':        
+            self.trial_counter += 1
+            self.overlop_trials(coef_vector,epoch_iter)
+            if epoch_iter >= self.overlap_size-1:
+                summed_coef_vector = np.sum(self.overlap_buffer,axis=1)
+                _result = self.labels[np.argmax(summed_coef_vector)]
+                if _result == trial_iter:
+                    self.result_matrix[CV_iter, self.labels.index(trial_iter), epoch_iter-self.overlap_size+1] = 1
+                    label = 1
+                else:
+                    label = 0
+                
+                if "LDA_model_builder" in dir(self) and self.LDA_status == 'train':
+                    self.LDA_model_builder.train_data_collector(summed_coef_vector,label)
+                    
+                if self.trial_counter % len(self.labels) == 0 and epoch_iter == self.epoch_num-1:
+                    self.acc_storage[CV_iter] = np.mean(self.result_matrix[CV_iter,:,:])
+                    print('ACC of the {} cross validation loop is: {}'.format(CV_iter,self.acc_storage[CV_iter]))            
+        elif self.data_type == 'simu_online':
+            self.overlop_trials(coef_vector,epoch_iter)
+            if epoch_iter >= self.overlap_size-1:
+                summed_coef_vector = np.sum(self.overlap_buffer,axis=1)
+                _result = self.labels[np.argmax(summed_coef_vector)]
+                if _result == trial_iter:
+                    self.result_matrix[epoch_iter-self.overlap_size+1] = 1
+                
+                if "LDA_model_builder" in dir(self) and self.LDA_status == 'test':
+                    pred_label = self.LDA_model_builder.test_model(summed_coef_vector)
+                    if pred_label == 0:
+                        self.verified_result_matrix[epoch_iter-self.overlap_size+1] = -1
+
+                if epoch_iter == self.epoch_num-1:
+                    if "LDA_model_builder" in dir(self) == False:
+                        print('Note: LDA was not applied to verify the result, this is the REAL accuracy')
+                        self.acc_storage = np.mean(self.result_matrix)
+                    elif "LDA_model_builder" in dir(self) and self.LDA_status == 'test':
+                        self.confusing_matrix_calculate()
+        
+    def ACC_calculate(self):
+        """
+        Callable function to calculate the accuracy among all cross validation loops.
+        """
+        self.overall_ACC = np.mean(self.acc_storage)
+        print('Overall ACC of current data is {}'.format(self.overall_ACC))
+    
+    def confusing_matrix_calculate(self):
+        negative_samples_index = np.where(self.verified_result_matrix == 0)
+        positive_samples_index = np.where(self.verified_result_matrix == 1)
+        negative_samples = self.result_matrix[negative_samples_index]
+        positive_samples = self.result_matrix[positive_samples_index]
+        true_positive = np.sum(positive_samples)/positive_samples.shape[0]
+        false_positive = (positive_samples.shape[0]-np.sum(positive_samples))/positive_samples.shape[0]
+        false_negative = (negative_samples.shape[0]-np.sum(negative_samples))/negative_samples.shape[0]
+        true_negative = np.sum(negative_samples)/negative_samples.shape[0]
+        print('NOTE: LDA was applied to verify the result.')
+        print('NOTE: This is confusing matrix:')
+        print('TP:{}\tTN:{}'.format(true_positive, true_negative))
+        print('FP:{}\tFN:{}'.format((false_positive, false_negative)))
+        print('Precision:{}\tRecall:{}'.format(true_positive/(true_positive+false_negative),true_positive/(true_positive+false_negative)))    

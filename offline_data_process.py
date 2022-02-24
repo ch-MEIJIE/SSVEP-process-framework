@@ -25,6 +25,7 @@
 from multiprocessing import set_forkserver_preload
 from os.path import join as pjoin
 from tkinter.filedialog import test
+from turtle import mode
 import numpy as np
 import scipy.signal
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
@@ -48,14 +49,15 @@ class data_trainer():
         self.epochs_in_data = data_info['epochs_in_data']
         self.blocks_in_data = data_info['blocks_in_data']
     
-    def trainer(self):
+    def model_train(self):
         """
         Method to train feature extracting model by iteracting the dict keys, which map to all kind of triggers data.
         """
         self.spatial_filters = dict()
         for train_trial_iter in self.event_series:
-            self.spatial_filters[train_trial_iter] = self.feature_extract(self.slice_data_storage[train_trial_iter])
-            self.template_calculate(self.slice_data_storage[train_trial_iter], train_trial_iter)
+            train_epochs = np.array(self.slice_data_storage[train_trial_iter])
+            self.spatial_filters[train_trial_iter] = self.feature_extract(train_epochs)
+            self.template_calculate(train_epochs, train_trial_iter)
 
     def feature_extract(self,data):
         """
@@ -71,15 +73,15 @@ class data_trainer():
         self.template_storage[event_type] = np.mean(train_data, axis=0)
         self.template_events = list(self.template_storage.keys())
     
-    def train_result_get(self):
-        return self.spatial_filters, self.template_storage    
+    def get_model(self):
+        return self.spatial_filters, self.template_storage, self.event_series    
 
 # %%
 class data_cross_validation(data_trainer):
     
     def cross_validation_runner(self):
         self.dataset_split_index = train_test_split(split_type='K_Fold',test_sample_num=self.epochs_in_data, total_sample_num=self.epochs_in_data*self.blocks_in_data)
-        self.result_saver = result_analyser(self.event_series,self.dataset_split_index.shape[0],self.epochs_in_data, data_type = 'offline', LDA = 'train', OVERLAP = 3)
+        self.result_saver = result_analyser(self.event_series,self.dataset_split_index.shape[0],self.epochs_in_data, data_type = 'offline', LDA = 'train', OVERLAP = 4)
         for cross_validation_iter in range(self.dataset_split_index.shape[0]):
             self.CV_iter = cross_validation_iter
             print('cross validation loop: {}'.format(cross_validation_iter))
@@ -104,35 +106,61 @@ class data_cross_validation(data_trainer):
                 # corrcoef_list.append(coef_vector)
                 self.result_saver.result_decide(coef_vector,self.CV_iter,test_trial_iter,test_epoch_iter)
 
+    def train_lda(self):
+        self.result_saver.LDA_model_builder.train_model()
+        return self.result_saver.LDA_model_builder
+
 class simulated_online():
-    def __init__(self, data, data_info, spatial_filters, template_storage):
-        self.data = data
-        self.epochs_in_data = data_info['simu_online']['epochs_in_trials']
-        self.spatial_filters = spatial_filters
-        self.template_storage = template_storage
-        self.event_series = self.data.keys()
-        self.result_saver = result_analyser(self.event_series, CV_loops = 1, epoch_num=len(self.epochs_series)*self.epochs_in_data, data_type='simu_online', LDA = 'test', OVERLAP = 3)
+    def __init__(self, data, data_info, model):
+        self.data = data['data']
+        self.epochs_in_data = data_info['epochs_in_data']
+        self.spatial_filters = model['spatial_filters']
+        self.template_storage = model['template_storage']
+        self.event_series = data['label']
+        self.result_saver = result_analyser(model['event_series'], CV_loops = 1, epoch_num=self.epochs_in_data, data_type='simu_online',  OVERLAP = 3, LDA = 'test', LDA_model = model['LDA_model'])
+        self.epoch_count = 0
     
     def tester(self):
-        for test_trial_iter in self.event_series:
-            test_epoches = np.array(self.data[test_trial_iter])
+        for test_epoch_iter in range(len(self.event_series)):
+            test_epoches = np.array(self.data[test_epoch_iter])
             corrcoef_storage = pattern_match(test_epoches, self.spatial_filters, self.template_storage)
-            self.result_saver.result_decide(corrcoef_storage, 1)
-            # TODO: data data_preprocessor should fit simulated_online data
-              
+            self.result_saver.result_decide(corrcoef_storage, 1, self.event_series[test_epoch_iter]-1, self.epoch_count)
+            self.epoch_count += 1              
 
 # %%
-def data_runner(usrname='mengqiangfan', data_path='./ThesisData/',block_num='block4'):
-    data_loader = data_preprocessor(usrname, data_path, block_num)
+def offline_data_runner(usrname='mengqiangfan', data_path='./raw_data/',block_num='block3'):
+    data_loader = data_preprocessor_raw(usrname, data_path, block_num)
     data_loader.read_config_file()
     data_loader.read_data()
-    data_loader.initial_filters()
     data_loader.slice_data()
-    packaged_data, data_info = data_loader.send_data()  
+    packaged_data, data_info = data_loader.send_data()
+    model_trainer = data_trainer(packaged_data, data_info)
+    model_trainer.model_train()
+    spatial_filters, template_storage, event_series = model_trainer.get_model()
     cross_validation_object = data_cross_validation(packaged_data, data_info)
     cross_validation_object.cross_validation_runner()
     
+    lda_model = cross_validation_object.train_lda()
+    
+    model = dict()
+    model['spatial_filters'] = spatial_filters
+    model['template_storage'] = template_storage
+    model['LDA_model'] = lda_model
+    model['event_series'] = event_series
+    
+    return model
+
+def simulated_online_runner(usrname='mengqiangfan', data_path='./raw_data/', block_num='simu_block3',model = None):
+    data_loader = data_preprocessor_raw(usrname, data_path, block_num, data_type='simu_online')
+    data_loader.read_config_file()
+    data_loader.read_data()
+    data_loader.slice_data()
+    packaged_data, data_info = data_loader.send_data()
+    simulated_online_object = simulated_online(packaged_data, data_info, model)
+    simulated_online_object.tester()
+        
 # %%
 if __name__ == '__main__':
-    data_runner()
+    model = offline_data_runner()
+    simulated_online_runner(model=model)
 # %%

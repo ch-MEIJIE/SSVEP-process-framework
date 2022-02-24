@@ -1,4 +1,4 @@
-# SSVEP Decoding Framework(Document is complete for the scripts are underimproving!)
+# SSVEP Decoding Framework(Document is complete for scripts are under improving!)
 
 I want to build a general pipeline for SSVEP EEG signal decoding, in which it is easy to complete basic EEG processing stages like:
 

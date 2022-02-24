@@ -1,4 +1,4 @@
-# SSVEP Decoding Framework
+# SSVEP Decoding Framework(Document is complete for the scripts are underimproving!)
 
 I want to build a general pipeline for SSVEP EEG signal decoding, in which it is easy to complete basic EEG processing stages like:
 
@@ -11,4 +11,4 @@ The key inspiration of the framework design ethic is modular, and I want to take
 
 There are 3 main class defined in this framework. If you just focus on get model for online experiment or do some cross validation, the `data_runner` class and `data_cross_validation` class are what you need, you can just read through and run them. In the `filter_apply` class, you can configure your own time-filter parameters, and what I must admit is that the filter parameters in the current version is not the best, and haven't been optimized at all! 
 
-You may notice that there are several functions above the main classes, they can be named as helper functions. I can move them together and separate them to a helper collection and make the main program clear.
+You may notice that there are several functions above the main classes, they can be named as helper functions. I can move them together and separate them to a helper collection and make the main program clear. 

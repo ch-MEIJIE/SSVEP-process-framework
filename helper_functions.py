@@ -9,7 +9,7 @@ from functools import wraps
 import json
 import warnings
 
-from wheels.load_data_helper import load_neuracle_data
+from data_loaders.load_data_helper import load_neuracle_data
 
 class LDA_trainer():
     def __init__(self):

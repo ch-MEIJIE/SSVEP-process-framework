@@ -40,7 +40,9 @@ from helper_functions import *
 
 # %%
 class data_trainer():
-
+    """
+    
+    """
     def __init__(self, data, data_info, spatial_filter_type='TRCA') -> None:
         self.template_storage = dict()
         self.slice_data_storage = data
@@ -81,7 +83,7 @@ class data_cross_validation(data_trainer):
     
     def cross_validation_runner(self):
         self.dataset_split_index = train_test_split(split_type='K_Fold',test_sample_num=self.epochs_in_data, total_sample_num=self.epochs_in_data*self.blocks_in_data)
-        self.result_saver = result_analyser(self.event_series,self.dataset_split_index.shape[0],self.epochs_in_data, data_type = 'offline', LDA = 'train', OVERLAP = 4)
+        self.result_saver = result_analyser(self.event_series,self.dataset_split_index.shape[0],self.epochs_in_data, data_type = 'offline', LDA = 'train', OVERLAP = 3)
         for cross_validation_iter in range(self.dataset_split_index.shape[0]):
             self.CV_iter = cross_validation_iter
             print('cross validation loop: {}'.format(cross_validation_iter))
@@ -128,7 +130,7 @@ class simulated_online():
             self.epoch_count += 1              
 
 # %%
-def offline_data_runner(usrname='S01', data_path='./raw_data/',block_num='block3'):
+def offline_data_runner(usrname='S01', data_path='./raw_data/',block_num='block2'):
     data_loader = data_preprocessor_raw(usrname, data_path, block_num)
     data_loader.read_config_file()
     data_loader.read_data()
@@ -150,7 +152,7 @@ def offline_data_runner(usrname='S01', data_path='./raw_data/',block_num='block3
     
     return model
 
-def simulated_online_runner(usrname='S01', data_path='./raw_data/', block_num='simu_block3',model = None):
+def simulated_online_runner(usrname='S01', data_path='./raw_data/', block_num='simu_block2',model = None):
     data_loader = data_preprocessor_raw(usrname, data_path, block_num, data_type='simu_online')
     data_loader.read_config_file()
     data_loader.read_data()

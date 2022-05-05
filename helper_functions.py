@@ -8,6 +8,7 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from functools import wraps
 import json
 import warnings
+import matplotlib.pyplot as plt
 
 from data_loaders.load_data_helper import load_neuracle_data
 
@@ -29,6 +30,11 @@ class LDA_trainer():
         self.labels.append(label)
     
     def train_model(self):
+        x = np.array(self.train_data)[:,0]
+        y = np.array(self.train_data)[:,1]
+        fig, ax = plt.subplots()
+        ax.scatter(x,y,c=self.labels)
+        plt.show()
         self.linear_model = LinearDiscriminantAnalysis()
         self.linear_model.fit(np.array(self.train_data),np.array(self.labels))
     
@@ -450,7 +456,7 @@ class result_analyser():
                 if self.LDA_status == 'test':
                     pred_label = self.LDA_model.test_model(summed_coef_vector)
                     if pred_label == 0:
-                        self.verified_result_matrix[epoch_iter-self.overlap_size+1] = -1
+                        self.verified_result_matrix[epoch_iter-self.overlap_size+1] = 0
 
                 if epoch_iter == self.epoch_num-1:
                     if self.LDA_status == None:
@@ -472,10 +478,10 @@ class result_analyser():
         positive_samples_index = np.where(self.verified_result_matrix == 1)
         negative_samples = self.result_matrix[negative_samples_index]
         positive_samples = self.result_matrix[positive_samples_index]
-        true_positive = np.sum(positive_samples)/positive_samples.shape[0]
-        false_positive = (positive_samples.shape[0]-np.sum(positive_samples))/positive_samples.shape[0]
-        false_negative = (negative_samples.shape[0]-np.sum(negative_samples))/negative_samples.shape[0]
-        true_negative = np.sum(negative_samples)/negative_samples.shape[0]
+        true_positive = np.sum(positive_samples)
+        false_positive = positive_samples.shape[0]-np.sum(positive_samples)
+        false_negative = negative_samples.shape[0]-np.sum(negative_samples)
+        true_negative = np.sum(negative_samples)
         print('NOTE: LDA was applied to verify the result.')
         print('NOTE: This is confusing matrix:')
         print('TP:{}\tTN:{}'.format(true_positive, true_negative))

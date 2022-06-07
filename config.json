@@ -2,7 +2,7 @@
     "data_path" : ".",
     "epoch_length" :{
         "block1" : 0.2,
-        "block2" : 0.4,
+        "block2" : 0.2,
         "block3" : 0.3,
         "block4" : 0.5,
         "simu_block1" : 0.2,

@@ -9,6 +9,9 @@ from functools import wraps
 import json
 import warnings
 import matplotlib.pyplot as plt
+from mpl_toolkits import mplot3d
+from sklearn.neural_network import MLPClassifier
+from sklearn import svm
 
 from data_loaders.load_data_helper import load_neuracle_data
 
@@ -18,30 +21,52 @@ class LDA_trainer():
         self.labels = list()
     
     def extract_sample(self, coef_vector):
-        max_data = np.max(coef_vector)
-        label_predict = np.argmax(coef_vector)
-        coef_vector = np.delete(coef_vector,label_predict)
-        submax_data = np.max(coef_vector)
-        return max_data, submax_data
+        norm_coef = self.normalize(coef_vector)
+        # max_data = np.max(coef_vector)
+        # label_predict = np.argmax(coef_vector)
+        # coef_vector = np.delete(coef_vector,label_predict)
+        # submax_data = np.max(coef_vector)
+        # return max_data, submax_data
+        norm_coef = np.sort(norm_coef)
+        largest_samples = norm_coef[-2:]
+        return largest_samples
     
     def train_data_collector(self, coef_vector, label):
-        max_data, submax_data = self.extract_sample(coef_vector)
-        self.train_data.append([max_data,submax_data])
+        largest_samples = self.extract_sample(coef_vector)
+        self.train_data.append(largest_samples)
         self.labels.append(label)
     
     def train_model(self):
-        x = np.array(self.train_data)[:,0]
-        y = np.array(self.train_data)[:,1]
-        fig, ax = plt.subplots()
-        ax.scatter(x,y,c=self.labels)
-        plt.show()
-        self.linear_model = LinearDiscriminantAnalysis()
-        self.linear_model.fit(np.array(self.train_data),np.array(self.labels))
+        # x = np.array(self.train_data)[:,0]
+        # y = np.array(self.train_data)[:,1]
+        # z = np.array(self.train_data)[:,2]
+        # fig = plt.figure()
+        # ax = plt.axes(projection = '3d')
+        # ax = plt.axes()
+        # ax.scatter(y,z,c=self.labels)
+        # plt.show()
+        self.model = LinearDiscriminantAnalysis()
+        # self.model = MLPClassifier(solver='lbfgs', alpha=1e-5, hidden_layer_sizes=(100,200,50))
+        self.model = svm.SVC(kernel="linear", class_weight='balanced')
+        # self.model = svm.SVC(kernel="rbf")
+        # self.model = svm.NuSVC(gamma="auto")
+        self.model.fit(np.array(self.train_data),np.array(self.labels))
+        
+        return self.train_data, self.labels
     
     def test_model(self, test_sample):
-        max_data, submax_data = self.extract_sample(test_sample)
-        predict_label = self.linear_model.predict([[max_data, submax_data]])
+        largest_samples = self.extract_sample(test_sample)
+        predict_label = self.model.predict([largest_samples])
         return predict_label[0]
+    
+    def normalize(self, data):
+        mu = np.mean(data, axis=0)
+        sigma = np.std(data, axis = 0)
+        return (data - mu) / sigma
+    
+    def put_trian_direct(self, data, labels):
+        self.train_data = data
+        self.labels = labels
 
 def trca_matrix(X):
     """ TRCA kernel function
@@ -213,7 +238,7 @@ class data_preprocessor():
     Base class to load, pre-process, extract features and calculate templates from rawdata.
     You can view this class as a base class and inherit it to develop your own developing process
     """
-    def __init__(self, usrname, data_path, block_num, file_name='EEG.mat', time_domain_filter = True, extended_bounds = 0, data_type = 'offline'):
+    def __init__(self, usrname, data_path, block_num, file_name='EEG.mat', time_domain_filter = True, extended_bounds = 0, data_type = 'offline', data_length = 0.4):
         """Parameter initial function
         
         Note: 
@@ -231,6 +256,7 @@ class data_preprocessor():
         self.data_path = data_path
         self.block_num = block_num
         self.file_name = file_name
+        self.epoch_duration = data_length
         
         self.time_domain_filter = time_domain_filter
         self.extended_bounds = extended_bounds
@@ -249,7 +275,7 @@ class data_preprocessor():
         self.blocks_in_data = self.data_config[self.data_type]['blocks_in_data']
         self.epochs_in_data = self.data_config[self.data_type]['epochs_in_trials']
         # epoch duration in unit second(s)
-        self.epoch_duration = self.data_config['epoch_length'][self.block_num]
+        # self.epoch_duration = self.data_config['epoch_length'][self.block_num]
     
     def read_data(self):
         self.data_dir = pjoin(self.data_path,self.usrname, self.block_num, self.file_name)
@@ -486,4 +512,6 @@ class result_analyser():
         print('NOTE: This is confusing matrix:')
         print('TP:{}\tTN:{}'.format(true_positive, true_negative))
         print('FP:{}\tFN:{}'.format(false_positive, false_negative))
-        print('Precision:{}\tRecall:{}'.format(true_positive/(true_positive+false_negative),true_positive/(true_positive+false_negative))) 
+        precision = true_positive/(true_positive+false_positive)
+        recall = true_positive/(true_positive+false_negative)
+        print(f'Precision:{precision}\tRecall:{recall}') 

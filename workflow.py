@@ -22,17 +22,11 @@
 # However, if you like, you can feel free add some packages for boosting the function of the framework.
 
 # %%
-from multiprocessing import set_forkserver_preload
-from os.path import join as pjoin
-from tkinter.filedialog import test
-from turtle import mode
-import numpy as np
-import scipy.signal
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from scipy.io import loadmat
-import json
-from collections import defaultdict
 from matplotlib import pyplot as plt
+from sklearn.inspection import DecisionBoundaryDisplay
+
+from sklearn.neural_network import MLPClassifier
+
 
 # Manully packages and funtions
 from helper_functions import *
@@ -92,6 +86,7 @@ class data_cross_validation(data_trainer):
             self.tester(validation_index)
         self.result_saver.ACC_calculate()
     
+        
     def trainer(self,select_index):
         self.spatial_filters = dict()
         for train_trial_iter in self.event_series:
@@ -109,8 +104,8 @@ class data_cross_validation(data_trainer):
                 self.result_saver.result_decide(coef_vector,self.CV_iter,test_trial_iter,test_epoch_iter)
 
     def train_lda(self):
-        self.result_saver.LDA_model_builder.train_model()
-        return self.result_saver.LDA_model_builder
+        model_train_data, model_labels = self.result_saver.LDA_model_builder.train_model()
+        return self.result_saver.LDA_model_builder, model_train_data, model_labels
 
 class simulated_online():
     def __init__(self, data, data_info, model):
@@ -130,8 +125,8 @@ class simulated_online():
             self.epoch_count += 1              
 
 # %%
-def offline_data_runner(usrname='S01', data_path='./raw_data/',block_num='block2'):
-    data_loader = data_preprocessor_raw(usrname, data_path, block_num)
+def offline_data_runner(usrname='S04', data_path='./raw_data/',block_num='block2', data_length = 0.4):
+    data_loader = data_preprocessor_raw(usrname, data_path, block_num, data_length = data_length)
     data_loader.read_config_file()
     data_loader.read_data()
     data_loader.slice_data()
@@ -142,7 +137,7 @@ def offline_data_runner(usrname='S01', data_path='./raw_data/',block_num='block2
     cross_validation_object = data_cross_validation(packaged_data, data_info)
     cross_validation_object.cross_validation_runner()
     
-    lda_model = cross_validation_object.train_lda()
+    lda_model, lda_model_train_data, lda_model_labels = cross_validation_object.train_lda()
     
     model = dict()
     model['spatial_filters'] = spatial_filters
@@ -150,9 +145,9 @@ def offline_data_runner(usrname='S01', data_path='./raw_data/',block_num='block2
     model['LDA_model'] = lda_model
     model['event_series'] = event_series
     
-    return model
+    return model, lda_model_train_data, lda_model_labels
 
-def simulated_online_runner(usrname='S01', data_path='./raw_data/', block_num='simu_block2',model = None):
+def simulated_online_runner(usrname='S04', data_path='./raw_data/', block_num='simu_block2',model = None):
     data_loader = data_preprocessor_raw(usrname, data_path, block_num, data_type='simu_online')
     data_loader.read_config_file()
     data_loader.read_data()
@@ -163,6 +158,38 @@ def simulated_online_runner(usrname='S01', data_path='./raw_data/', block_num='s
         
 # %%
 if __name__ == '__main__':
-    model = offline_data_runner()
+    lda_data_cache = []
+    lda_label_cache = []
+    fig,axs = plt.subplots(3,2)
+    plot_count = 0
+    for data_length in [0.15,0.2,0.25,0.3,0.35,0.4]:
+        model, lda_model_train_data, lda_model_labels = offline_data_runner(data_length = data_length)
+        x = np.array(lda_model_train_data)[:,0]
+        y = np.array(lda_model_train_data)[:,1]
+        axs[plot_count//2, plot_count%2].scatter(x,y, c=lda_model_labels)
+        axs[plot_count//2, plot_count%2].set_xlabel('Sub-max value')
+        axs[plot_count//2, plot_count%2].set_ylabel('Max value')
+        axs[plot_count//2, plot_count%2].set_title('Epoch length: {}'.format(data_length))
+        disp = DecisionBoundaryDisplay.from_estimator(model['LDA_model'].model, np.array(lda_model_train_data), plot_method = 'contour', colors = 'k', levels=[0], ax=axs[plot_count//2, plot_count%2])
+        lda_data_cache.append(np.array(lda_model_train_data))
+        lda_label_cache.append(np.array(lda_model_labels))
+        plot_count += 1
+    lda_data_cache = np.array(lda_data_cache).reshape(-1,2)
+    lda_label_cache = np.array(lda_label_cache).reshape(-1,1)
+    # lda_model = MLPClassifier(solver='lbfgs', alpha=1e-5, hidden_layer_sizes=(100,50))
+    # lda_model.fit(lda_data_cache, lda_label_cache)
+    # model['LDA_model'] = lda_model
+    lda_model = LDA_trainer()
+    lda_model.put_trian_direct(lda_data_cache, lda_label_cache)
+    lda_model.train_model()
+    model['LDA_model'] = lda_model
     simulated_online_runner(model=model)
+    fig.suptitle('LDA')
+    fig.tight_layout()
+
+    fig.show()
+    plt.savefig('LDA.eps', dpi=300)
+    pass
+    # model, lda_model_train_data, lda_model_labels = offline_data_runner(data_length = 0.4)
+    # simulated_online_runner(model=model)
 # %%
